@@ -2401,12 +2401,12 @@ static int proxSensor_miscOpen(struct inode *inode, struct file *file)
 static int proxSensor_miscRelease(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	if(atomic_dec_return(prox_open_count) == 0){
+	if(atomic_dec_and_test(&prox_open_count)){
 		ret = mproximity_store_switch_onoff(false);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
 			err("proximity_hw_turn_onoff(false) ERROR\n");
-			atomic_inc(prox_open_count);
+			atomic_inc(&prox_open_count);
 		}
 	}
 	
@@ -2459,7 +2459,7 @@ static int lightSensor_miscOpen(struct inode *inode, struct file *file)
 static int lightSensor_miscRelease(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	if(atomic_dec_return(&light_open_count) == 0){
+	if(atomic_dec_and_test(&light_open_count)){
 		ret = mlight_store_switch_onoff(false);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
