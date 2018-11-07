@@ -28,6 +28,7 @@
 #include <linux/miscdevice.h>
 #include <asm/uaccess.h>
 #include <linux/ioctl.h>
+#include <linux/atomic.h>
 
 /******************************/
 /* Debug and Log System */
@@ -82,8 +83,8 @@ static int rgb_first_data_ready = 0;
 bool camera_HAL_switch_on;
 #define ENABLE_PROXIMITY_IOCTL_LIB 1
 #define ENABLE_LIGHT_IOCTL_LIB 1
-static int prox_open_count = 0;
-static int light_open_count = 0;
+static atomic_t prox_open_count = ATOMIC_INIT(0);
+static atomic_t light_open_count = ATOMIC_INIT(0);
 
 /*********************************************/
 /* ALSPS Front RGB Sensor Functions*/
@@ -2382,17 +2383,17 @@ static enum hrtimer_restart proximity_timer_function(struct hrtimer *timer)
 static int proxSensor_miscOpen(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	if(prox_open_count == 0){
+	if(atomic_inc_return(prox_open_count) == 1){
 		ret = mproximity_store_switch_onoff(true);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
 			err("proximity_hw_turn_onoff(true) ERROR\n");
-		} else {
-			prox_open_count++;
-		}
-	} else if(prox_open_count > 0) {
-		prox_open_count++;
-		log("proximity sensor has been opened(count=%d)\n", prox_open_count);
+			atomic_dec(prox_open_count);
+		} 
+	} else {
+		atomic_dec(prox_open_count);
+		log("proximity sensor has been opened!\n");
+		return -EBUSY;
 	}
 	return ret;
 }
@@ -2400,18 +2401,15 @@ static int proxSensor_miscOpen(struct inode *inode, struct file *file)
 static int proxSensor_miscRelease(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	prox_open_count--;
-	if(prox_open_count == 0){
+	if(atomic_dec_return(prox_open_count) == 0){
 		ret = mproximity_store_switch_onoff(false);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
 			err("proximity_hw_turn_onoff(false) ERROR\n");
-			prox_open_count++;
+			atomic_inc(prox_open_count);
 		}
-	} else if(prox_open_count < 0){
-		prox_open_count = 0;
-		log("proximity sensor has been closed, do nothing(count=%d)\n", prox_open_count);
 	}
+	
 	return ret;
 }
 
@@ -2443,17 +2441,17 @@ int proxSensor_miscRegister(void)
 static int lightSensor_miscOpen(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	if(light_open_count == 0){
+	if(atomic_inc_return(light_open_count) == 1){
 		ret = mlight_store_switch_onoff(true);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
 			err("light_hw_turn_onoff(true) ERROR\n");
-		} else {
-			light_open_count++;
-		}
-	} else if(light_open_count > 0) {
-		light_open_count++;
-		log("light sensor has been opened(count=%d)\n", light_open_count);
+			atomic_dec(light_open_count);
+		} 
+	} else {
+		atomic_dec(light_open_count);
+		log("light sensor has been opened!\n");
+		return -EBUSY;
 	}
 	return ret;
 }
@@ -2461,18 +2459,15 @@ static int lightSensor_miscOpen(struct inode *inode, struct file *file)
 static int lightSensor_miscRelease(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	light_open_count--;
-	if(light_open_count == 0){
+	if(atomic_dec_return(light_open_count) == 0){
 		ret = mlight_store_switch_onoff(false);
 		dbg("%s: %d\n", __func__, ret);
 		if (ret < 0) {
 			err("light_hw_turn_onoff(false) ERROR\n");
-			light_open_count++;
+			atomic_inc(light_open_count);
 		}
-	} else if(light_open_count < 0){
-		light_open_count = 0;
-		log("light sensor has been closed, do nothing(count=%d)\n", light_open_count);
 	}
+	
 	return ret;
 }
 
